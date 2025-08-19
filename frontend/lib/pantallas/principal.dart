@@ -32,13 +32,14 @@ import '../utils/momento_actual.dart';
 import '../utils/fondos_por_momento.dart';
 import '../theme/tema_visual.dart';
 import '../widgets/indicador_cargando.dart';
-import '../config/app_config.dart'; 
-import '../config/backend_config.dart'; 
+import '../config/app_config.dart';
+import '../config/backend_config.dart';
 import '../widgets/botones_fechas.dart';
 import 'package:provider/provider.dart';
 import '../providers/tema_provider.dart';
 import 'dart:async';
 import 'dart:io';
+import '../widgets/pronostico.dart';
 
 class PantallaMarea extends StatefulWidget {
   const PantallaMarea({super.key});
@@ -55,14 +56,16 @@ class _PantallaMareaState extends State<PantallaMarea> with WidgetsBindingObserv
   String estacionSeleccionada = 'san_fernando';
   final GlobalKey encabezadoKey = GlobalKey();
 
-  // Toggles de visualización principal
+  // Toggles de visualización principal (hoy)
   bool mostrarGraficoFuturo = false;
   bool mostrarTabla = false;
+  bool mostrarPronostico = false;
 
   // Estado por fecha futura
-  Map<DateTime, bool> diasExpandidos = {}; 
-  Map<DateTime, bool> mostrarGraficoPorFecha = {};
-  Map<DateTime, bool> mostrarTablaPorFecha = {};
+  final Map<DateTime, bool> diasExpandidos = {};
+  final Map<DateTime, bool> mostrarGraficoPorFecha = {};
+  final Map<DateTime, bool> mostrarTablaPorFecha = {};
+  final Map<DateTime, bool> mostrarPronosticoPorFecha = {};
   final Map<DateTime, GlobalKey> clavesPorFecha = {};
 
   // Anuncios (solo edición free)
@@ -203,23 +206,20 @@ class _PantallaMareaState extends State<PantallaMarea> with WidgetsBindingObserv
           ),
         ),
         child: SafeArea(
-        child: datos.isEmpty
-            ? (_offline && !_teniaCache
-                // Estado: sin conexión y sin cache previa
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(
-                        'Sin conexión y sin datos guardados.\nConéctate al menos una vez para cargar datos.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontFamily: 'PressStart', fontSize: 10, color: Colors.white),
+          child: datos.isEmpty
+              ? (_offline && !_teniaCache
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text(
+                          'Sin conexión y sin datos guardados.\nConéctate al menos una vez para cargar datos.',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontFamily: 'PressStart', fontSize: 10, color: Colors.white),
+                        ),
                       ),
-                    ),
-                  )
-                // Estado: cargando datos (o mostrando cache previa)
-                : const Center(child: IndicadorCargando()))
-            : LayoutBuilder(
-
+                    )
+                  : const Center(child: IndicadorCargando()))
+              : LayoutBuilder(
                   builder: (context, constraints) {
                     // Calcular alturas disponibles para el contenedor principal
                     final pantallaTotal = constraints.maxHeight;
@@ -270,7 +270,7 @@ class _PantallaMareaState extends State<PantallaMarea> with WidgetsBindingObserv
                               ),
                             ),
 
-                          // Contenedor principal: gráfico compacto / expandido o tabla
+                          // Contenedor principal: gráfico compacto / expandido / tabla / pronóstico (hoy)
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
@@ -287,177 +287,239 @@ class _PantallaMareaState extends State<PantallaMarea> with WidgetsBindingObserv
                                     maxHeight: alturaDisponible.clamp(300.0, pantallaTotal * 0.65),
                                   ),
                                   width: double.infinity,
-                                  
-                                  child: mostrarTabla
-                                      ? SingleChildScrollView(child: TablaMareaHoy(datos: datos, fecha: hoy))
-                                      : mostrarGraficoFuturo
-                                          ? GraficoExpandido(datos: datos, fecha: hoy)
-                                          : GraficoMareaCompacto(datos: datos, fecha: hoy),
+                                  child: mostrarPronostico
+                                      ? PronosticoDashboard(datos: datos, fecha: hoy)
+                                      : (mostrarTabla
+                                          ? SingleChildScrollView(child: TablaMareaHoy(datos: datos, fecha: hoy))
+                                          : (mostrarGraficoFuturo
+                                              ? GraficoExpandido(datos: datos, fecha: hoy)
+                                              : GraficoMareaCompacto(datos: datos, fecha: hoy))),
                                 ),
                                 const SizedBox(height: 6),
 
-                          // Acciones: alternar gráfico expandido / tabla
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            children: [
-                              IconButton(
-                                icon: Icon(
-                                  mostrarGraficoFuturo ? Icons.fullscreen_exit : Icons.fullscreen,
-                                  color: tema.texto,
-                                ),
-                                iconSize: 25,
-                                visualDensity: const VisualDensity(horizontal: 0.0, vertical: -4.0),
-                                onPressed: () {
-                                  if (_anuncioMostrandose) return;
-                                  _anuncioMostrandose = true;
+                                // Acciones (hoy) con anuncios
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                  children: [
+                                    // 📈 Expandido
+                                    IconButton(
+                                      icon: Icon(
+                                        mostrarGraficoFuturo ? Icons.fullscreen_exit : Icons.fullscreen,
+                                        color: tema.texto,
+                                      ),
+                                      iconSize: 25,
+                                      visualDensity: const VisualDensity(horizontal: 0.0, vertical: -4.0),
+                                      onPressed: () {
+                                        if (_anuncioMostrandose) return;
+                                        _anuncioMostrandose = true;
 
-                                  GestorAnuncios.manejarInteraccion(
-                                    context: context,
-                                    accion: () {
-                                      setState(() {
-                                        mostrarGraficoFuturo = !mostrarGraficoFuturo;
-                                        mostrarTabla = false;
-                                      });
-                                      _anuncioMostrandose = false;
-                                    },
-                                    requiereInternet: true,
-                                  );
-                                },
-                              ),
-                              IconButton(
-                                icon: Icon(
-                                  mostrarTabla ? Icons.show_chart : Icons.table_chart,
-                                  color: tema.texto,
-                                ),
-                                iconSize: 25,
-                                visualDensity: const VisualDensity(horizontal: 0.0, vertical: -4.0),
-                                onPressed: () {
-                                  if (_anuncioMostrandose) return;
-                                  _anuncioMostrandose = true;
+                                        GestorAnuncios.manejarInteraccion(
+                                          context: context,
+                                          accion: () {
+                                            setState(() {
+                                              mostrarGraficoFuturo = !mostrarGraficoFuturo;
+                                              if (mostrarGraficoFuturo) {
+                                                mostrarTabla = false;
+                                                mostrarPronostico = false;
+                                              }
+                                            });
+                                            _anuncioMostrandose = false;
+                                          },
+                                          requiereInternet: true,
+                                        );
+                                      },
+                                      tooltip: 'Gráfico expandido',
+                                    ),
 
-                                  GestorAnuncios.manejarInteraccion(
-                                    context: context,
-                                    accion: () {
-                                      setState(() {
-                                        mostrarTabla = !mostrarTabla;
-                                      });
-                                      _anuncioMostrandose = false;
-                                    },
-                                    requiereInternet: true,
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
+                                    // 📋 Tabla
+                                    IconButton(
+                                      icon: Icon(
+                                        mostrarTabla ? Icons.show_chart : Icons.table_chart,
+                                        color: tema.texto,
+                                      ),
+                                      iconSize: 25,
+                                      visualDensity: const VisualDensity(horizontal: 0.0, vertical: -4.0),
+                                      onPressed: () {
+                                        if (_anuncioMostrandose) return;
+                                        _anuncioMostrandose = true;
+
+                                        GestorAnuncios.manejarInteraccion(
+                                          context: context,
+                                          accion: () {
+                                            setState(() {
+                                              mostrarTabla = !mostrarTabla;
+                                              if (mostrarTabla) {
+                                                mostrarGraficoFuturo = false;
+                                                mostrarPronostico = false;
+                                              }
+                                            });
+                                            _anuncioMostrandose = false;
+                                          },
+                                          requiereInternet: true,
+                                        );
+                                      },
+                                      tooltip: 'Tabla del día',
+                                    ),
+
+                                    // ☁️ Pronóstico
+                                    IconButton(
+                                      icon: Icon(
+                                        mostrarPronostico ? Icons.cloud_done : Icons.cloud,
+                                        color: tema.texto,
+                                      ),
+                                      iconSize: 25,
+                                      visualDensity: const VisualDensity(horizontal: 0.0, vertical: -4.0),
+                                      onPressed: () {
+                                        if (_anuncioMostrandose) return;
+                                        _anuncioMostrandose = true;
+
+                                        GestorAnuncios.manejarInteraccion(
+                                          context: context,
+                                          accion: () {
+                                            setState(() {
+                                              mostrarPronostico = !mostrarPronostico;
+                                              if (mostrarPronostico) {
+                                                mostrarGraficoFuturo = false;
+                                                mostrarTabla = false;
+                                              }
+                                            });
+                                            _anuncioMostrandose = false;
+                                          },
+                                          requiereInternet: true,
+                                        );
+                                      },
+                                      tooltip: 'Pronóstico (bloques del día)',
+                                    ),
+                                  ],
+                                ),
                               ],
                             ),
                           ),
 
                           const SizedBox(height: 12),
 
-// ⬇️ Aca va el banner
-if (!esVersionPremium && _bannerCargado)
-  Padding(
-    padding: const EdgeInsets.symmetric(vertical: 12),
-    child: Container(
-      alignment: Alignment.center,
-      width: _bannerAd.size.width.toDouble(),
-      height: _bannerAd.size.height.toDouble(),
-      child: AdWidget(ad: _bannerAd),
-    ),
-  ),
+                          // ⬇️ Banner
+                          if (!esVersionPremium && _bannerCargado)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              child: Container(
+                                alignment: Alignment.center,
+                                width: _bannerAd.size.width.toDouble(),
+                                height: _bannerAd.size.height.toDouble(),
+                                child: AdWidget(ad: _bannerAd),
+                              ),
+                            ),
 
-    // Próximos dos días: bloques expandibles con gráfico/tabla
-    ...List.generate(2, (i) {
-  final fecha = DateTime(hoy.year, hoy.month, hoy.day + i + 1);
-  final expandido = diasExpandidos[fecha] ?? false;
-  final mostrarGrafico = mostrarGraficoPorFecha[fecha] ?? false;
-  final mostrarTabla = mostrarTablaPorFecha[fecha] ?? false;
+                          // Próximos dos días: bloques expandibles con gráfico/tabla/pronóstico
+                          ...List.generate(2, (i) {
+                            final fecha = DateTime(hoy.year, hoy.month, hoy.day + i + 1);
+                            final expandido = diasExpandidos[fecha] ?? false;
+                            final verGrafico = mostrarGraficoPorFecha[fecha] ?? false;
+                            final verTabla = mostrarTablaPorFecha[fecha] ?? false;
+                            final verPronostico = mostrarPronosticoPorFecha[fecha] ?? false;
 
-  clavesPorFecha.putIfAbsent(fecha, () => GlobalKey());
+                            clavesPorFecha.putIfAbsent(fecha, () => GlobalKey());
 
-  return BotonFechaExpandable(
-    fecha: fecha,
-    expandido: expandido,
-    datos: datos,
-    mostrarGraficoExpandido: mostrarGrafico,
-    mostrarTabla: mostrarTabla,
-    alturaDisponible: alturaDisponible,
-    contenedorKey: clavesPorFecha[fecha],
+                            return BotonFechaExpandable(
+                              fecha: fecha,
+                              expandido: expandido,
+                              datos: datos,
+                              mostrarGraficoExpandido: verGrafico,
+                              mostrarTabla: verTabla,
+                              mostrarPronostico: verPronostico,
+                              alturaDisponible: alturaDisponible,
+                              contenedorKey: clavesPorFecha[fecha],
+                              onTap: () {
+                                if (_anuncioMostrandose) return;
+                                _anuncioMostrandose = true;
 
-    onTap: () {
-      if (_anuncioMostrandose) return;
-      _anuncioMostrandose = true;
+                                GestorAnuncios.manejarInteraccion(
+                                  context: context,
+                                  accion: () {
+                                    setState(() {
+                                      diasExpandidos[fecha] = !expandido;
+                                    });
 
-      GestorAnuncios.manejarInteraccion(
-        context: context,
-        accion: () {
-          setState(() {
-            diasExpandidos[fecha] = !expandido;
-          });
+                                    // Scroll suave al bloque abierto/cerrado
+                                    Future.delayed(const Duration(milliseconds: 250), () {
+                                      final contextDestino = expandido
+                                          ? encabezadoKey.currentContext
+                                          : clavesPorFecha[fecha]?.currentContext;
 
-          Future.delayed(const Duration(milliseconds: 250), () {
-            final contextDestino = expandido
-                ? encabezadoKey.currentContext
-                : clavesPorFecha[fecha]?.currentContext;
+                                      if (contextDestino != null) {
+                                        Scrollable.ensureVisible(
+                                          contextDestino,
+                                          duration: const Duration(milliseconds: 500),
+                                          curve: Curves.easeInOut,
+                                          alignment: expandido ? 0 : 0.2,
+                                        );
+                                      }
+                                      _anuncioMostrandose = false;
+                                    });
+                                  },
+                                  requiereInternet: true,
+                                );
+                              },
+                              onToggleGrafico: () {
+                                if (_anuncioMostrandose) return;
+                                _anuncioMostrandose = true;
 
-            if (contextDestino != null) {
-              Scrollable.ensureVisible(
-                contextDestino,
-                duration: const Duration(milliseconds: 500),
-                curve: Curves.easeInOut,
-                alignment: expandido ? 0 : 0.2,
-              );
-            }
+                                GestorAnuncios.manejarInteraccion(
+                                  context: context,
+                                  accion: () {
+                                    setState(() {
+                                      mostrarGraficoPorFecha[fecha] = !verGrafico;
+                                      mostrarTablaPorFecha[fecha] = false;
+                                      mostrarPronosticoPorFecha[fecha] = false; // apaga pronóstico
+                                    });
+                                    _anuncioMostrandose = false;
+                                  },
+                                  requiereInternet: true,
+                                );
+                              },
+                              onToggleTabla: () {
+                                if (_anuncioMostrandose) return;
+                                _anuncioMostrandose = true;
 
-            _anuncioMostrandose = false;
-          });
-        },
-        requiereInternet: true,
-      );
-    },
+                                GestorAnuncios.manejarInteraccion(
+                                  context: context,
+                                  accion: () {
+                                    setState(() {
+                                      mostrarTablaPorFecha[fecha] = !verTabla;
+                                      mostrarPronosticoPorFecha[fecha] = false; // apaga pronóstico
+                                    });
+                                    _anuncioMostrandose = false;
+                                  },
+                                  requiereInternet: true,
+                                );
+                              },
+                              onTogglePronostico: () {
+                                if (_anuncioMostrandose) return;
+                                _anuncioMostrandose = true;
 
-    onToggleGrafico: () {
-      if (_anuncioMostrandose) return;
-      _anuncioMostrandose = true;
-
-      GestorAnuncios.manejarInteraccion(
-        context: context,
-        accion: () {
-          setState(() {
-            mostrarGraficoPorFecha[fecha] = !mostrarGrafico;
-            mostrarTablaPorFecha[fecha] = false;
-          });
-          _anuncioMostrandose = false;
-        },
-        requiereInternet: true,
-      );
-    },
-
-    onToggleTabla: () {
-      if (_anuncioMostrandose) return;
-      _anuncioMostrandose = true;
-
-      GestorAnuncios.manejarInteraccion(
-        context: context,
-        accion: () {
-          setState(() {
-            mostrarTablaPorFecha[fecha] = !mostrarTabla;
-          });
-          _anuncioMostrandose = false;
-        },
-        requiereInternet: true,
-      );
-    },
-  );
-}),
-
+                                GestorAnuncios.manejarInteraccion(
+                                  context: context,
+                                  accion: () {
+                                    setState(() {
+                                      mostrarPronosticoPorFecha[fecha] = !verPronostico;
+                                      if (mostrarPronosticoPorFecha[fecha] == true) {
+                                        mostrarGraficoPorFecha[fecha] = false;
+                                        mostrarTablaPorFecha[fecha] = false;
+                                      }
+                                    });
+                                    _anuncioMostrandose = false;
+                                  },
+                                  requiereInternet: true,
+                                );
+                              },
+                            );
+                          }),
 
                           const SizedBox(height: 12),
 
                           // Leyenda de fuente y última actualización mostrada
                           Text(
-                            "Datos extraídos del INA ${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.tryParse(ultimaActualizacion) ?? DateTime.now())}",
+                            "Datos extraídos del INA y SMN ${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.tryParse(ultimaActualizacion) ?? DateTime.now())}",
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontFamily: 'PressStart',
