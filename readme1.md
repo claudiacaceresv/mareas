@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://play.google.com/store/apps/details?id=com.appmareas.app_mareas" title="Descargar en Google Play">
-    <img src="frontend/assets/capturas/mareas.gif" alt="Demo de Mareas" width="100%">
+    <img src="frontend/assets/capturas/mareas1.gif" alt="Demo de Mareas" width="100%">
   </a>
 </p>
 
