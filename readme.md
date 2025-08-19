@@ -1,52 +1,50 @@
-# Mareas — App de alturas de marea + clima (Flutter + Django ETL)
+# Mareas — Tide Heights + Weather App (Flutter + Django ETL)
 
-**Mareas** muestra la curva de marea por estación y la enriquece con pronóstico meteorológico. El backend corre un **ETL en Python/Django** que integra datos del **INA** y del **SMN**, los transforma y los deja listos en **JSON cacheado** para que el frontend en **Flutter** los consuma con experiencia **offline-first**.
+**Mareas** shows the tide curve per station and enriches it with a weather forecast. The backend runs a **Python/Django ETL** that integrates data from **INA** and **SMN**, transforms it, and stores it as **cached JSON** so the **Flutter** frontend can consume it with an **offline-first** experience.
 
-[▶︎ Descargar en Google Play](https://play.google.com/store/apps/details?id=com.appmareas.app_mareas)
+[▶︎ Get it on Google Play](https://play.google.com/store/apps/details?id=com.appmareas.app_mareas)
 
 <p align="center">
-  <a href="https://play.google.com/store/apps/details?id=com.appmareas.app_mareas" title="Descargar en Google Play">
-    <img src="frontend/assets/capturas/mareas.gif" alt="Demo de Mareas" width="100%">
+  <a href="https://play.google.com/store/apps/details?id=com.appmareas.app_mareas" title="Get it on Google Play">
+    <img src="frontend/assets/capturas/mareas.gif" alt="Mareas demo" width="100%">
   </a>
 </p>
 
 ---
 
-## Qué hace
+## What it does
 
-- **Ingesta (Extract):** descarga alturas hidrométricas del INA (JSON) y el pronóstico “pron5d” del SMN (ZIP/TXT).
-- **Transformación (Transform):**
-
-  - Agrupa por **fecha/hora** y calcula **mín/ prom/ máx** de altura.
-  - Interpreta **viento** (grados → 16 rumbos cardinales), temperatura y precipitación.
-  - Ajustes temporales (zona horaria AR, fila “23:59” para continuidad).
-
-- **Carga (Load):** persiste por **estación** un `marea_<estacion>.json` (cache) que el API expone.
-- **Entrega (Serve):** endpoints Django entregan el JSON; el app Flutter lo usa con caché local y modo **sin conexión**.
-- **Automatización:** pensado para **cron/job** (Railway u otro). Logueo y tolerancia a errores/encodings.
+- **Ingest (Extract):** downloads hydrometric heights from INA (JSON) and the SMN “pron5d” forecast (ZIP/TXT).
+- **Transform:**
+  - Groups by **date/time** and computes **min/avg/max** height.
+  - Interprets **wind** (degrees → 16 compass points), temperature, and precipitation.
+  - Time adjustments (Argentina timezone, adds a “23:59” row for continuity).
+- **Load:** persists per **station** a `marea_<station>.json` (cache) that the API exposes.
+- **Serve:** Django endpoints return the JSON; the Flutter app uses it with local cache and **offline mode**.
+- **Automation:** designed for **cron/jobs** (Railway or other). Logging and tolerance to encoding errors.
 
 ---
 
-## Pila tecnológica
+## Tech stack
 
-- **Backend / ETL:** Python 3 · Django · `pandas` · `requests` · jobs programados.
-- **Fuentes:** INA (hidrometría) · SMN (pronóstico 5 días).
-- **Frontend:** Flutter 3 · `fl_chart` (gráficos) · `shared_preferences`.
-- **Mensajería:** Firebase Cloud Messaging (banners de “actualización” y “promoción”).
-- **Monetización:** Google Mobile Ads (Rewarded/Interstitial/Banner) con **alternancia + cooldown + precarga**.
-- **Deploy:** Railway (detección de entorno para rutas de caché).
+- **Backend / ETL:** Python 3 · Django · `pandas` · `requests` · scheduled jobs.
+- **Sources:** INA (hydrometry) · SMN (5-day forecast).
+- **Frontend:** Flutter 3 · `fl_chart` (charts) · `shared_preferences`.
+- **Messaging:** Firebase Cloud Messaging (update and promo banners).
+- **Monetization:** Google Mobile Ads (Rewarded/Interstitial/Banner) with **alternation + cooldown + preloading**.
+- **Deploy:** Railway (environment-aware cache paths).
 
 ---
 
-## Archivo clave (ETL)
+## Key file (ETL)
 
 `marea/scripts/actualizacion.py`
 
-- Descarga y **decodifica** el TXT comprimido del SMN (prueba múltiples encodings).
-- Detecta **bloques por estación**, parsea filas y mapea viento a **rosa de 16 rumbos**.
-- Consulta INA en ventana **\[00:00 hoy, +3 días]**, agrupa y calcula **mín/prom/máx** por hora.
-- **Merge** por `(fecha, hora)` con el pronóstico, y guarda JSON por estación (local o `/app/marea/cache` en Railway).
-- Ejecutable para **todas** o **una** estación:
+- Downloads and **decodes** SMN’s compressed TXT (tries multiple encodings).
+- Detects **blocks by station**, parses rows, and maps wind to a **16-point compass rose**.
+- Queries INA in the window **\[00:00 today, +3 days]**, groups, and computes **min/avg/max** per hour.
+- **Merges** on `(date, time)` with the forecast, then saves JSON per station (local or `/app/marea/cache` on Railway).
+- Executable for **all** stations or a **single** one:
 
   ```bash
   python marea/scripts/actualizacion.py --todas
@@ -55,10 +53,10 @@
 
 ---
 
-## API (resumen)
+## API (summary)
 
-- `GET /marea/estaciones/` → catálogo de estaciones (id, nombre, metadatos).
-- `GET /marea/alturas/<estacion_id>/` →
+- `GET /marea/estaciones/` → station catalog (id, name, metadata).
+- `GET /marea/alturas/<station_id>/` →
 
   ```json
   {
@@ -83,30 +81,30 @@
 
 ---
 
-## App Flutter (UX)
+## Flutter app (UX)
 
-- **Gráfico compacto** y **expandido** con línea de **“hora actual”**.
-- **Tabla** por hora (mín/ prom/ máx).
-- **Selector de estación**, **temas** (amanecer/día/atardecer/noche) y **modo automático**.
-- **Offline-first:** caché local + aviso “modo sin conexión”.
-- **Notificaciones** en menú (badge) con persistencia.
-- **Flavors:** `free` (con anuncios) y `pro` (sin anuncios).
-
----
-
-## Estructura de configuración (frontend)
-
-- `lib/config/anuncios_config.dart` → IDs AdMob (test/producción) y **switch** de modo.
-- `lib/config/app_config.dart` → `esVersionPremium` según **flavor**.
-- `lib/config/backend_config.dart` → `backendBaseUrl` (sin `/` final).
-- `frontend/mareas/lib/config/estaciones_config.dart` → `estacionesHabilitadas` (en sincronía con backend).
+- **Compact** and **expanded** chart with **“current time”** line.
+- **Hourly table** (min/avg/max).
+- **Station selector**, **themes** (dawn/day/sunset/night) and **auto mode**.
+- **Offline-first:** local cache + “offline mode” notice.
+- **Notifications** in menu (badge) with persistence.
+- **Flavors:** `free` (with ads) and `pro` (no ads).
 
 ---
 
-## Despliegue / Automatización
+## Config structure (frontend)
 
-- **Railway:** el script detecta el entorno y escribe cache en `/app/marea/cache`.
-- **Cron (ejemplo):**
+- `lib/config/anuncios_config.dart` → AdMob IDs (test/production) and **mode switch**.
+- `lib/config/app_config.dart` → `esVersionPremium` based on **flavor**.
+- `lib/config/backend_config.dart` → `backendBaseUrl` (no trailing `/`).
+- `frontend/mareas/lib/config/estaciones_config.dart` → `estacionesHabilitadas` (keep in sync with backend).
+
+---
+
+## Deployment / Automation
+
+- **Railway:** the script detects the environment and writes cache to `/app/marea/cache`.
+- **Cron (example):**
 
   ```cron
   */30 * * * * /usr/bin/python /app/marea/scripts/actualizacion.py >> /var/log/mareas.log 2>&1
@@ -114,44 +112,44 @@
 
 ---
 
-## Frontend (Flutter) — Quickstart
+## Frontend (Flutter) — Quick start
 
 ```bash
 # Flutter
 flutter pub get
 
-# Flavor free
+# Free flavor
 flutter run --dart-define=FLAVOR=free
 
-# Flavor pro
+# Pro flavor
 flutter run --dart-define=FLAVOR=pro
 ```
 
-**Configuración clave**
+**Key configuration**
 
-- `lib/config/backend_config.dart` → `backendBaseUrl` del API.
-- `lib/config/app_config.dart` → `esVersionPremium` (derivado del flavor).
-- `lib/config/anuncios_config.dart` → IDs AdMob (test vs reales).
-- Estaciones visibles: `frontend/mareas/lib/config/estaciones_config.dart`.
-
----
-
-## Observabilidad
-
-- **Logging** del ETL con trazas de decodificación, conteo de filas y errores por estación.
-- **Fallbacks de encoding** para TXT del SMN (evita caídas por codificación).
-- **Offline-first** en el cliente (cache local + mensajes claros).
+- `lib/config/backend_config.dart` → API `backendBaseUrl`.
+- `lib/config/app_config.dart` → `esVersionPremium` (derived from flavor).
+- `lib/config/anuncios_config.dart` → AdMob IDs (test vs. production).
+- Visible stations: `frontend/mareas/lib/config/estaciones_config.dart`.
 
 ---
 
-## Tecnologías
+## Observability
 
-- **Backend/ETL**: Python, Django, pandas, requests, cron/worker, Railway.
-- **Frontend**: Flutter, fl_chart, SharedPreferences, Firebase Messaging, Google Mobile Ads.
-- **Build**: Flavors Free/Pro, AdMob test IDs en desarrollo.
+- **ETL logging** with decoding traces, row counts, and errors per station.
+- **Encoding fallbacks** for SMN TXT (avoids crashes due to encoding).
+- **Offline-first** on the client (local cache + clear messaging).
 
 ---
 
-## Contacto
+## Technologies
+
+- **Backend/ETL:** Python, Django, pandas, requests, cron/worker, Railway.
+- **Frontend:** Flutter, fl_chart, SharedPreferences, Firebase Messaging, Google Mobile Ads.
+- **Build:** Free/Pro flavors, AdMob test IDs in development.
+
+---
+
+## Contact
 
 - **LinkedIn:** [https://www.linkedin.com/in/claudiacaceresv/](https://www.linkedin.com/in/claudiacaceresv/)
